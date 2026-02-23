@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Eye, MoreHorizontal } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// src/components/admin/orders.tsx
+import React, { useEffect, useState, useCallback } from 'react';
+import { Search, Eye, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -26,99 +27,146 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import { toast } from 'sonner';
-
-interface Order {
-  id: string;
-  userId: string | null;
-  status: string;
-  total: number;
-  createdAt: string;
-  profile: {
-    email: string | null;
-    fullName: string | null;
-  } | null;
-}
+import ordersService, { Order, OrdersResponse } from '@/services/orders';
 
 const statusOptions = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
 
 const statusColors: Record<string, string> = {
-  pending: 'bg-warning/20 text-warning',
-  processing: 'bg-accent/20 text-accent',
-  shipped: 'bg-primary/20 text-primary',
-  delivered: 'bg-success/20 text-success',
-  cancelled: 'bg-destructive/20 text-destructive',
+  pending: 'bg-warning/20 text-warning border-warning/20',
+  processing: 'bg-accent/20 text-accent border-accent/20',
+  shipped: 'bg-primary/20 text-primary border-primary/20',
+  delivered: 'bg-success/20 text-success border-success/20',
+  cancelled: 'bg-destructive/20 text-destructive border-destructive/20',
+};
+
+const statusLabels: Record<string, string> = {
+  pending: 'Pending',
+  processing: 'Processing',
+  shipped: 'Shipped',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
 };
 
 const AdminOrders: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const navigate = useNavigate();
+  const [ordersData, setOrdersData] = useState<OrdersResponse>({ orders: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
+  
+  const pageSize = 10;
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          profile:profiles!orders_user_id_fkey (
-            email,
-            full_name
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      
-      // Handle nested profile structure
-      const ordersData = (data || []).map(order => ({
-        ...order,
-        profile: Array.isArray(order.profile) ? order.profile[0] : order.profile
-      })) as Order[];
-      
-      setOrders(ordersData);
-    } catch (error) {
+      setLoading(true);
+      const data = await ordersService.getOrders({
+        page: currentPage,
+        limit: pageSize,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        search: searchQuery || undefined,
+      });
+      setOrdersData(data);
+    } catch (error: any) {
       console.error('Error fetching orders:', error);
-      toast.error('Failed to load orders');
+      toast.error(error.response?.data?.message || 'Failed to load orders');
     } finally {
       setLoading(false);
     }
+  }, [currentPage, statusFilter, searchQuery]);
+
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      fetchOrders();
+    }, 500);
+
+    return () => clearTimeout(debounceTimer);
+  }, [fetchOrders]);
+
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1); // Reset to first page on search
   };
 
-  const updateOrderStatus = async (orderId: string, status: string) => {
-    try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status })
-        .eq('id', orderId);
+  const handleStatusFilterChange = (value: string) => {
+    setStatusFilter(value);
+    setCurrentPage(1); // Reset to first page on filter change
+  };
 
-      if (error) throw error;
-      toast.success('Order status updated');
+  const updateOrderStatus = async (orderId: number, status: string) => {
+    try {
+      setUpdatingOrderId(orderId);
+      await ordersService.updateOrderStatus(orderId, { status });
+      toast.success(`Order status updated to ${statusLabels[status]}`);
+      // Refresh the orders list
       fetchOrders();
-    } catch (error) {
-      console.error('Error updating order:', error);
-      toast.error('Failed to update order');
+    } catch (error: any) {
+      console.error('Error updating order status:', error);
+      toast.error(error.response?.data?.message || 'Failed to update order status');
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
 
-  const filteredOrders = orders.filter((order) => {
-    const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.profile?.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.profile?.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const handleViewOrder = (orderId: number) => {
+    navigate(`/admin/orders/${orderId}`);
+  };
+
+  const handleRefresh = () => {
+    fetchOrders();
+  };
+
+  const totalPages = Math.ceil(ordersData.total / pageSize);
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const formatOrderNumber = (orderNumber: string) => {
+    return `#${orderNumber}`;
+  };
+
+  const getCustomerName = (order: Order) => {
+    return order.user?.fullName || 'Guest';
+  };
+
+  const getCustomerEmail = (order: Order) => {
+    return order.user?.email || 'N/A';
+  };
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold">Orders</h1>
-        <p className="text-muted-foreground">{orders.length} total orders</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold">Orders</h1>
+          <p className="text-muted-foreground">
+            {ordersData.total} {ordersData.total === 1 ? 'order' : 'total orders'}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={loading}
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       {/* Filters */}
@@ -126,21 +174,21 @@ const AdminOrders: React.FC = () => {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <Input
-            placeholder="Search orders..."
+            placeholder="Search by order number, customer name, or email..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={handleSearch}
             className="pl-10"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             {statusOptions.map((status) => (
               <SelectItem key={status} value={status}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
+                {statusLabels[status]}
               </SelectItem>
             ))}
           </SelectContent>
@@ -149,77 +197,213 @@ const AdminOrders: React.FC = () => {
 
       {/* Orders Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        {loading ? (
+        {loading && ordersData.orders.length === 0 ? (
           <div className="p-8 text-center">
             <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full mx-auto" />
           </div>
-        ) : filteredOrders.length > 0 ? (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order ID</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="w-16"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredOrders.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell>
-                      <span className="font-mono text-sm">
-                        #{order.id.slice(0, 8).toUpperCase()}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{order.profile?.full_name || 'Guest'}</p>
-                        <p className="text-xs text-muted-foreground">{order.profile?.email || 'N/A'}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={order.status}
-                        onValueChange={(status) => updateOrderStatus(order.id, status)}
-                      >
-                        <SelectTrigger className="w-32 h-8">
-                          <Badge className={statusColors[order.status] || 'bg-muted'}>
-                            {order.status}
-                          </Badge>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statusOptions.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {status.charAt(0).toUpperCase() + status.slice(1)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-semibold">${Number(order.total).toFixed(2)}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(order.created_at).toLocaleDateString()}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon">
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
+        ) : ordersData.orders.length > 0 ? (
+          <>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order #</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Payment</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="w-16">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {ordersData.orders.map((order) => (
+                    <TableRow key={order.id}>
+                      <TableCell>
+                        <span className="font-mono text-sm font-medium">
+                          {formatOrderNumber(order.orderNumber)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{getCustomerName(order)}</p>
+                          <p className="text-xs text-muted-foreground">{getCustomerEmail(order)}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={order.status}
+                            onValueChange={(status) => updateOrderStatus(order.id, status)}
+                            disabled={updatingOrderId === order.id}
+                          >
+                            <SelectTrigger className="w-32 h-8">
+                              <Badge 
+                                variant="outline" 
+                                className={statusColors[order.status] || 'bg-muted'}
+                              >
+                                {statusLabels[order.status]}
+                              </Badge>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {statusOptions.map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {statusLabels[status]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {updatingOrderId === order.id && (
+                            <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-semibold">${Number(order.total).toFixed(2)}</span>
+                        <span className="text-xs text-muted-foreground block">
+                          incl. ${order.shippingCost.toFixed(2)} shipping
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant="outline"
+                          className={order.paymentStatus === 'paid' 
+                            ? 'bg-success/20 text-success border-success/20' 
+                            : 'bg-warning/20 text-warning border-warning/20'
+                          }
+                        >
+                          {order.paymentStatus}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {formatDate(order.createdAt)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewOrder(order.id)}>
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                              disabled={order.status === 'cancelled' || order.status === 'delivered'}
+                              className="text-destructive"
+                            >
+                              Cancel Order
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="p-4 border-t border-border">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage > 1) setCurrentPage(currentPage - 1);
+                        }}
+                        className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
+                      />
+                    </PaginationItem>
+                    
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+
+                      return (
+                        <PaginationItem key={pageNum}>
+                          <PaginationLink
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setCurrentPage(pageNum);
+                            }}
+                            isActive={currentPage === pageNum}
+                          >
+                            {pageNum}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    })}
+
+                    {totalPages > 5 && currentPage < totalPages - 2 && (
+                      <>
+                        <PaginationItem>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                        <PaginationItem>
+                          <PaginationLink
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setCurrentPage(totalPages);
+                            }}
+                          >
+                            {totalPages}
+                          </PaginationLink>
+                        </PaginationItem>
+                      </>
+                    )}
+
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                        }}
+                        className={currentPage === totalPages ? 'pointer-events-none opacity-50' : ''}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+          </>
         ) : (
           <div className="p-8 text-center text-muted-foreground">
-            No orders found
+            {searchQuery || statusFilter !== 'all' ? (
+              <div>
+                <p className="mb-2">No orders match your filters</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setStatusFilter('all');
+                  }}
+                >
+                  Clear filters
+                </Button>
+              </div>
+            ) : (
+              <p>No orders found</p>
+            )}
           </div>
         )}
       </div>

@@ -68,6 +68,16 @@ class UsersService {
     const response = await api.patch<UpdateRoleResponse>(`${this.baseUrl}/${userId}/role`, roleData);
     return response.data;
   }
+
+  async getUserById(id: string): Promise<UserProfile> {
+    const response = await api.get<UserProfile>(`${this.baseUrl}/${id}`);
+    return response.data;
+  }
+
+  async getUserCount(): Promise<number> {
+    const response = await api.get<{ count: number }>(`${this.baseUrl}/count`);
+    return response.data.count;
+  }
 }
 
 export default new UsersService();

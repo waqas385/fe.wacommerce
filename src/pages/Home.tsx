@@ -2,18 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Sparkles, Truck, Shield, RotateCcw } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import ProductCard from '@/components/store/ProductCard';
 import { Button } from '@/components/ui/button';
+import productsService, { Product } from '@/services/products';
 
-interface Product {
+// Extend the Product interface to include compareAtPrice for the component
+interface HomeProduct {
+  basePrice: number;
   id: string;
   name: string;
   slug: string;
   price: number;
-  compare_at_price: number | null;
-  image_url: string | null;
-  is_featured: boolean;
+  compareAtPrice: number | null;
+  imageUrl: string | null;
+  isFeatured: boolean;
 }
 
 const features = [
@@ -35,7 +37,7 @@ const features = [
 ];
 
 const Home: React.FC = () => {
-  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [featuredProducts, setFeaturedProducts] = useState<HomeProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,15 +46,24 @@ const Home: React.FC = () => {
 
   const fetchFeaturedProducts = async () => {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('is_active', true)
-        .eq('is_featured', true)
-        .limit(4);
+      // Fetch featured products from your service
+      const products = await productsService.getProducts({
+        featured: true,
+        limit: 4
+      });
 
-      if (error) throw error;
-      setFeaturedProducts(data || []);
+      // Transform the API products to match the HomeProduct interface
+      const transformedProducts: HomeProduct[] = products.map(product => ({
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        price: product.basePrice,
+        compareAtPrice: null, // You might want to add this field to your Product interface if needed
+        imageUrl: product.images?.[0] || null,
+        isFeatured: product.isFeatured
+      }));
+
+      setFeaturedProducts(transformedProducts);
     } catch (error) {
       console.error('Error fetching featured products:', error);
     } finally {
@@ -169,10 +180,10 @@ const Home: React.FC = () => {
                     id={product.id}
                     name={product.name}
                     slug={product.slug}
-                    price={product.price}
-                    compareAtPrice={product.compare_at_price}
-                    imageUrl={product.image_url}
-                    isFeatured={product.is_featured}
+                    price={product.basePrice || product.price}
+                    compareAtPrice={product.compareAtPrice}
+                    imageUrl={product.imageUrl}
+                    isFeatured={product.isFeatured}
                   />
                 </motion.div>
               ))}

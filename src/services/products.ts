@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { api } from './api';
 
 export interface Category {
@@ -12,6 +13,10 @@ export interface Category {
 }
 
 export interface Product {
+  stock: number;
+  imageUrl: string;
+  compareAtPrice: number;
+  price: number;
   id: string;
   name: string;
   slug: string;

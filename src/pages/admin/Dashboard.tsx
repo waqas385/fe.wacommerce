@@ -1,3 +1,4 @@
+// src/components/admin/AdminDashboard.tsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -6,25 +7,12 @@ import {
   ShoppingCart,
   Users,
   DollarSign,
-  TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
-interface Stats {
-  totalProducts: number;
-  totalOrders: number;
-  totalRevenue: number;
-  totalUsers: number;
-  recentOrders: {
-    id: string;
-    status: string;
-    total: number;
-    created_at: string;
-  }[];
-}
+import statsService, { DashboardStats } from '@/services/stats';
+import ordersService from '@/services/orders';
+import productsService from '@/services/products';
+import usersService from '@/services/users';
 
 const statCards = [
   { key: 'totalProducts', label: 'Products', icon: Package, color: 'bg-accent/10 text-accent' },
@@ -34,7 +22,7 @@ const statCards = [
 ];
 
 const AdminDashboard: React.FC = () => {
-  const [stats, setStats] = useState<Stats>({
+  const [stats, setStats] = useState<DashboardStats>({
     totalProducts: 0,
     totalOrders: 0,
     totalRevenue: 0,
@@ -49,25 +37,38 @@ const AdminDashboard: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      // Fetch counts
-      const [productsRes, ordersRes, usersRes] = await Promise.all([
-        supabase.from('products').select('id', { count: 'exact', head: true }),
-        supabase.from('orders').select('id, total, status, created_at').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+      setLoading(true);
+      
+      // Option 1: Use the dedicated stats service (recommended)
+      const dashboardStats = await statsService.getDashboardStats();
+      setStats(dashboardStats);
+      
+      /* Option 2: If you don't have a stats endpoint, use individual services
+      const [products, orders, users] = await Promise.all([
+        productsService.getProducts({ limit: 1 }), // Just to get count, you might need a count endpoint
+        ordersService.getOrders(),
+        usersService.getUserCount(),
       ]);
 
-      const orders = ordersRes.data || [];
+      // You might need to adjust this based on your actual API responses
       const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total), 0);
-
+      
       setStats({
-        totalProducts: productsRes.count || 0,
+        totalProducts: products.length, // This might need adjustment
         totalOrders: orders.length,
         totalRevenue,
-        totalUsers: usersRes.count || 0,
-        recentOrders: orders.slice(0, 5),
+        totalUsers: users, // Assuming getUserCount returns just the number
+        recentOrders: orders.slice(0, 5).map(order => ({
+          id: order.id,
+          status: order.status,
+          total: order.total,
+          created_at: order.created_at,
+        })),
       });
+      */
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error('Error fetching dashboard stats:', error);
+      // You might want to show an error toast/notification here
     } finally {
       setLoading(false);
     }
@@ -106,9 +107,9 @@ const AdminDashboard: React.FC = () => {
                       {loading ? (
                         <span className="animate-pulse">---</span>
                       ) : stat.isCurrency ? (
-                        `$${stats[stat.key as keyof Stats].toLocaleString()}`
+                        `$${stats[stat.key as keyof DashboardStats].toLocaleString()}`
                       ) : (
-                        stats[stat.key as keyof Stats].toLocaleString()
+                        stats[stat.key as keyof DashboardStats].toLocaleString()
                       )}
                     </p>
                   </div>

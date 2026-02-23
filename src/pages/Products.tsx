@@ -220,10 +220,10 @@ const Products: React.FC = () => {
                   id={product.id}
                   name={product.name}
                   slug={product.slug}
-                  price={product.price}
-                  compareAtPrice={product.compare_at_price}
-                  imageUrl={product.image_url}
-                  isFeatured={product.is_featured}
+                  price={product.basePrice}
+                  compareAtPrice={product.compareAtPrice}
+                  imageUrl={product.imageUrl}
+                  isFeatured={product.isFeatured}
                 />
               </motion.div>
             ))}

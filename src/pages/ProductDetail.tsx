@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Minus, Plus, ShoppingBag, Heart, Share2, Check, Truck } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useCart } from '@/contexts/CartContext';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import productsService, { Product as ApiProduct } from '@/services/products';
+import categoriesService from '@/services/categories';
 
 interface Product {
   id: string;
@@ -13,13 +14,13 @@ interface Product {
   slug: string;
   description: string | null;
   price: number;
-  compare_at_price: number | null;
-  image_url: string | null;
+  compareAtPrice: number | null;
+  imageUrl: string | null;
   images: string[] | null;
   stock: number;
-  is_featured: boolean;
+  isFeatured: boolean;
   category: {
-    id: string;
+    id: number;
     name: string;
     slug: string;
   } | null;
@@ -42,31 +43,42 @@ const ProductDetail: React.FC = () => {
 
   const fetchProduct = async () => {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          *,
-          category:categories (
-            id,
-            name,
-            slug
-          )
-        `)
-        .eq('slug', slug)
-        .eq('is_active', true)
-        .single();
+      // Fetch product by slug from your service
+      const apiProduct = await productsService.getProductBySlug(slug);
+      
+      // Fetch category details if categoryId exists
+      let category = null;
+      if (apiProduct.categoryId) {
+        try {
+          category = await categoriesService.getCategoryById(String(apiProduct.categoryId));
+        } catch (error) {
+          console.error('Error fetching category:', error);
+        }
+      }
 
-      if (error) throw error;
-      
-      // Handle the nested category structure
-      const productData = {
-        ...data,
-        category: Array.isArray(data.category) ? data.category[0] : data.category
-      } as Product;
-      
-      setProduct(productData);
+      // Transform API product to match your Product interface
+      const transformedProduct: Product = {
+        id: apiProduct.id,
+        name: apiProduct.name,
+        slug: apiProduct.slug,
+        description: apiProduct.description,
+        price: apiProduct.basePrice,
+        compareAtPrice: null, // Add this to your API if needed
+        imageUrl: apiProduct.images?.[0] || null,
+        images: apiProduct.images || null,
+        stock: apiProduct.stock, // You'll need to add this to your API
+        isFeatured: apiProduct.isFeatured,
+        category: category ? {
+          id: category.id,
+          name: category.name,
+          slug: category.slug,
+        } : null
+      };
+
+      setProduct(transformedProduct);
     } catch (error) {
       console.error('Error fetching product:', error);
+      toast.error('Product not found');
       navigate('/products');
     } finally {
       setLoading(false);
@@ -112,9 +124,9 @@ const ProductDetail: React.FC = () => {
     return null;
   }
 
-  const allImages = [product.image_url, ...(product.images || [])].filter(Boolean) as string[];
-  const discount = product.compare_at_price 
-    ? Math.round((1 - product.price / product.compare_at_price) * 100) 
+  const allImages = [product.imageUrl, ...(product.images || [])].filter(Boolean) as string[];
+  const discount = product.compareAtPrice 
+    ? Math.round((1 - product.price / product.compareAtPrice) * 100) 
     : 0;
 
   return (
@@ -178,7 +190,7 @@ const ProductDetail: React.FC = () => {
             {/* Breadcrumb */}
             {product.category && (
               <Link
-                to={`/products?category=${product.category.id}`}
+                to={`/products?category_id=${product.category.id}`}
                 className="text-sm text-accent hover:underline mb-2"
               >
                 {product.category.name}
@@ -194,10 +206,10 @@ const ProductDetail: React.FC = () => {
               <span className={`text-3xl font-bold ${discount > 0 ? 'text-accent' : ''}`}>
                 ${product.price.toFixed(2)}
               </span>
-              {product.compare_at_price && (
+              {product.compareAtPrice && (
                 <>
                   <span className="price-original text-lg">
-                    ${product.compare_at_price.toFixed(2)}
+                    ${product.compareAtPrice.toFixed(2)}
                   </span>
                   <span className="badge-sale">-{discount}%</span>
                 </>

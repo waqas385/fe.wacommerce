@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ShoppingBag } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
-import { Button } from '@/components/ui/button';
+// import { Button } from '@/components/ui/button';
 
 interface ProductCardProps {
   id: string;
@@ -66,7 +66,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           {/* Quick Add Button */}
-          <motion.div
+          {/* <motion.div
             initial={{ opacity: 0, y: 10 }}
             whileHover={{ opacity: 1, y: 0 }}
             className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -78,7 +78,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
               <ShoppingBag className="w-4 h-4 mr-2" />
               Add to Cart
             </Button>
-          </motion.div>
+          </motion.div> */}
         </div>
 
         {/* Content */}
