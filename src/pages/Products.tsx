@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Filter, SlidersHorizontal, Search, X } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import ProductCard from '@/components/store/ProductCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,23 +19,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-
-interface Product {
-  id: string;
-  name: string;
-  slug: string;
-  price: number;
-  compare_at_price: number | null;
-  image_url: string | null;
-  is_featured: boolean;
-  category_id: string | null;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-}
+import productsService, { Product } from '@/services/products';
+import categoriesService, { Category } from '@/services/categories';
 
 const Products: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -51,46 +35,31 @@ const Products: React.FC = () => {
 
   useEffect(() => {
     fetchCategories();
+  }, []);
+
+  useEffect(() => {
     fetchProducts();
   }, [featured, selectedCategory, sortBy]);
 
   const fetchCategories = async () => {
-    const { data } = await supabase.from('categories').select('*');
-    setCategories(data || []);
+    try {
+      const data = await categoriesService.getCategories();
+      setCategories(data || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
   };
 
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('products')
-        .select('*')
-        .eq('is_active', true);
-
-      if (featured) {
-        query = query.eq('is_featured', true);
-      }
-
-      if (selectedCategory && selectedCategory !== 'all') {
-        query = query.eq('category_id', selectedCategory);
-      }
-
-      switch (sortBy) {
-        case 'price-low':
-          query = query.order('price', { ascending: true });
-          break;
-        case 'price-high':
-          query = query.order('price', { ascending: false });
-          break;
-        case 'name':
-          query = query.order('name');
-          break;
-        default:
-          query = query.order('created_at', { ascending: false });
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
+      const params = {
+        featured: featured || undefined,
+        category_id: selectedCategory !== 'all' ? selectedCategory : undefined,
+        sort: sortBy as 'newest' | 'price-low' | 'price-high' | 'name',
+      };
+      
+      const data = await productsService.getProducts(params);
       setProducts(data || []);
     } catch (error) {
       console.error('Error fetching products:', error);

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,14 +12,13 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import categoriesService, { Category } from '@/services/categories';
 
-interface Category {
-  id: string;
+interface CategoryFormData {
   name: string;
   slug: string;
-  description: string | null;
-  image_url: string | null;
-  created_at: string;
+  description: string;
+  imageUrl: string;
 }
 
 const AdminCategories: React.FC = () => {
@@ -28,11 +26,11 @@ const AdminCategories: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CategoryFormData>({
     name: '',
     slug: '',
     description: '',
-    image_url: '',
+    imageUrl: '',
   });
 
   useEffect(() => {
@@ -41,12 +39,7 @@ const AdminCategories: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
+      const data = await categoriesService.getCategories();
       setCategories(data || []);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -70,21 +63,15 @@ const AdminCategories: React.FC = () => {
       name: formData.name,
       slug: formData.slug || generateSlug(formData.name),
       description: formData.description || null,
-      image_url: formData.image_url || null,
+      imageUrl: formData.imageUrl || null,
     };
 
     try {
       if (editingCategory) {
-        const { error } = await supabase
-          .from('categories')
-          .update(categoryData)
-          .eq('id', editingCategory.id);
-
-        if (error) throw error;
+        await categoriesService.updateCategory(editingCategory.id, categoryData);
         toast.success('Category updated');
       } else {
-        const { error } = await supabase.from('categories').insert(categoryData);
-        if (error) throw error;
+        await categoriesService.createCategory(categoryData);
         toast.success('Category created');
       }
 
@@ -103,7 +90,7 @@ const AdminCategories: React.FC = () => {
       name: category.name,
       slug: category.slug,
       description: category.description || '',
-      image_url: category.image_url || '',
+      imageUrl: category.imageUrl || '',
     });
     setDialogOpen(true);
   };
@@ -112,8 +99,7 @@ const AdminCategories: React.FC = () => {
     if (!confirm('Are you sure you want to delete this category?')) return;
 
     try {
-      const { error } = await supabase.from('categories').delete().eq('id', id);
-      if (error) throw error;
+      await categoriesService.deleteCategory(id);
       toast.success('Category deleted');
       fetchCategories();
     } catch (error) {
@@ -128,7 +114,7 @@ const AdminCategories: React.FC = () => {
       name: '',
       slug: '',
       description: '',
-      image_url: '',
+      imageUrl: '',
     });
   };
 
@@ -179,12 +165,12 @@ const AdminCategories: React.FC = () => {
                 />
               </div>
               <div>
-                <Label htmlFor="image_url">Image URL</Label>
+                <Label htmlFor="imageUrl">Image URL</Label>
                 <Input
-                  id="image_url"
+                  id="imageUrl"
                   type="url"
-                  value={formData.image_url}
-                  onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                  value={formData.imageUrl}
+                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
                   placeholder="https://..."
                 />
               </div>
@@ -221,7 +207,15 @@ const AdminCategories: React.FC = () => {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-accent/10 text-accent rounded-lg flex items-center justify-center">
-                    <Tag className="w-5 h-5" />
+                    {category.imageUrl ? (
+                      <img 
+                        src={category.imageUrl} 
+                        alt={category.name}
+                        className="w-full h-full object-cover rounded-lg"
+                      />
+                    ) : (
+                      <Tag className="w-5 h-5" />
+                    )}
                   </div>
                   <div>
                     <h3 className="font-semibold">{category.name}</h3>
@@ -255,6 +249,10 @@ const AdminCategories: React.FC = () => {
           <Tag className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="font-semibold text-lg mb-2">No categories yet</h3>
           <p className="text-muted-foreground mb-4">Create your first category to organize products</p>
+          <Button onClick={() => setDialogOpen(true)} className="bg-gradient-accent">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Category
+          </Button>
         </div>
       )}
     </div>

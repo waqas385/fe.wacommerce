@@ -30,13 +30,13 @@ import { toast } from 'sonner';
 
 interface Order {
   id: string;
-  user_id: string | null;
+  userId: string | null;
   status: string;
   total: number;
-  created_at: string;
+  createdAt: string;
   profile: {
     email: string | null;
-    full_name: string | null;
+    fullName: string | null;
   } | null;
 }
 

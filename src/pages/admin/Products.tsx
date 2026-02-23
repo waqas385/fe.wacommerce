@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Pencil, Trash2, Search, MoreHorizontal, Image as ImageIcon } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { Plus, Pencil, Trash2, Search, MoreHorizontal, Image as ImageIcon, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -19,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -36,73 +34,87 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import productsService, { Product, CreateProductData } from '@/services/products';
+import categoriesService, { Category } from '@/services/categories';
 
-interface Product {
-  id: string;
+interface ProductFormData {
   name: string;
   slug: string;
-  description: string | null;
-  price: number;
-  compare_at_price: number | null;
-  image_url: string | null;
-  stock: number;
-  is_featured: boolean;
-  is_active: boolean;
-  category_id: string | null;
-  created_at: string;
-}
-
-interface Category {
-  id: string;
-  name: string;
+  description: string;
+  shortDescription: string;
+  brand: string;
+  fragranceNotes: string;
+  categoryId: string;
+  basePrice: string;
+  images: string[];
+  isFeatured: boolean;
+  isActive: boolean;
+  metaTitle: string;
+  metaDescription: string;
 }
 
 const AdminProducts: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState({
+  const [currentImageUrl, setCurrentImageUrl] = useState('');
+  const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     slug: '',
     description: '',
-    price: '',
-    compare_at_price: '',
-    image_url: '',
-    stock: '0',
-    is_featured: false,
-    is_active: true,
-    category_id: '',
+    shortDescription: '',
+    brand: '',
+    fragranceNotes: '',
+    categoryId: 'none',
+    basePrice: '',
+    images: [],
+    isFeatured: false,
+    isActive: true,
+    metaTitle: '',
+    metaDescription: '',
   });
 
   useEffect(() => {
-    fetchProducts();
-    fetchCategories();
+    Promise.all([fetchProducts(), fetchCategories()])
+      .catch(error => {
+        console.error('Error initializing data:', error);
+        toast.error('Failed to load initial data');
+      });
   }, []);
 
   const fetchProducts = async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setProducts(data || []);
+      const data = await productsService.getProducts();
+      setProducts(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching products:', error);
       toast.error('Failed to load products');
+      setProducts([]);
     } finally {
       setLoading(false);
     }
   };
 
   const fetchCategories = async () => {
-    const { data } = await supabase.from('categories').select('id, name');
-    setCategories(data || []);
+    setCategoriesLoading(true);
+    try {
+      const data = await categoriesService.getCategories();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      toast.error('Failed to load categories');
+      setCategories([]);
+    } finally {
+      setCategoriesLoading(false);
+    }
   };
 
   const generateSlug = (name: string) => {
@@ -112,43 +124,67 @@ const AdminProducts: React.FC = () => {
       .replace(/(^-|-$)/g, '');
   };
 
+  const handleAddImage = () => {
+    if (currentImageUrl && !formData.images.includes(currentImageUrl)) {
+      setFormData({
+        ...formData,
+        images: [...formData.images, currentImageUrl]
+      });
+      setCurrentImageUrl('');
+    }
+  };
+
+  const handleRemoveImage = (imageToRemove: string) => {
+    setFormData({
+      ...formData,
+      images: formData.images.filter(img => img !== imageToRemove)
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const productData = {
-      name: formData.name,
-      slug: formData.slug || generateSlug(formData.name),
-      description: formData.description || null,
-      price: parseFloat(formData.price),
-      compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
-      image_url: formData.image_url || null,
-      stock: parseInt(formData.stock),
-      is_featured: formData.is_featured,
-      is_active: formData.is_active,
-      category_id: formData.category_id || null,
-    };
-
     try {
-      if (editingProduct) {
-        const { error } = await supabase
-          .from('products')
-          .update(productData)
-          .eq('id', editingProduct.id);
+      // Parse fragrance notes if it's valid JSON, otherwise store as string
+      let parsedFragranceNotes = null;
+      if (formData.fragranceNotes) {
+        try {
+          parsedFragranceNotes = JSON.parse(formData.fragranceNotes);
+        } catch {
+          parsedFragranceNotes = formData.fragranceNotes;
+        }
+      }
 
-        if (error) throw error;
-        toast.success('Product updated');
+      const productData: CreateProductData = {
+        name: formData.name,
+        slug: formData.slug || generateSlug(formData.name),
+        description: formData.description,
+        shortDescription: formData.shortDescription || null,
+        brand: formData.brand || null,
+        fragranceNotes: parsedFragranceNotes,
+        categoryId: formData.categoryId === 'none' ? null : parseInt(formData.categoryId),
+        basePrice: parseFloat(formData.basePrice),
+        images: formData.images,
+        isFeatured: formData.isFeatured,
+        isActive: formData.isActive,
+        metaTitle: formData.metaTitle || null,
+        metaDescription: formData.metaDescription || null,
+      };
+
+      if (editingProduct) {
+        await productsService.updateProduct(editingProduct.id.toString(), productData);
+        toast.success('Product updated successfully');
       } else {
-        const { error } = await supabase.from('products').insert(productData);
-        if (error) throw error;
-        toast.success('Product created');
+        await productsService.createProduct(productData);
+        toast.success('Product created successfully');
       }
 
       setDialogOpen(false);
       resetForm();
-      fetchProducts();
+      await fetchProducts();
     } catch (error: any) {
       console.error('Error saving product:', error);
-      toast.error(error.message || 'Failed to save product');
+      toast.error(error.response?.data?.message || error.message || 'Failed to save product');
     }
   };
 
@@ -158,13 +194,16 @@ const AdminProducts: React.FC = () => {
       name: product.name,
       slug: product.slug,
       description: product.description || '',
-      price: product.price.toString(),
-      compare_at_price: product.compare_at_price?.toString() || '',
-      image_url: product.image_url || '',
-      stock: product.stock.toString(),
-      is_featured: product.is_featured,
-      is_active: product.is_active,
-      category_id: product.category_id || '',
+      shortDescription: product.shortDescription || '',
+      brand: product.brand || '',
+      fragranceNotes: product.fragranceNotes ? JSON.stringify(product.fragranceNotes, null, 2) : '',
+      categoryId: product.categoryId?.toString() || 'none',
+      basePrice: product.basePrice.toString(),
+      images: product.images || [],
+      isFeatured: product.isFeatured || false,
+      isActive: product.isActive ?? true,
+      metaTitle: product.metaTitle || '',
+      metaDescription: product.metaDescription || '',
     });
     setDialogOpen(true);
   };
@@ -173,10 +212,9 @@ const AdminProducts: React.FC = () => {
     if (!confirm('Are you sure you want to delete this product?')) return;
 
     try {
-      const { error } = await supabase.from('products').delete().eq('id', id);
-      if (error) throw error;
-      toast.success('Product deleted');
-      fetchProducts();
+      await productsService.deleteProduct(id);
+      toast.success('Product deleted successfully');
+      await fetchProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
       toast.error('Failed to delete product');
@@ -189,19 +227,41 @@ const AdminProducts: React.FC = () => {
       name: '',
       slug: '',
       description: '',
-      price: '',
-      compare_at_price: '',
-      image_url: '',
-      stock: '0',
-      is_featured: false,
-      is_active: true,
-      category_id: '',
+      shortDescription: '',
+      brand: '',
+      fragranceNotes: '',
+      categoryId: 'none',
+      basePrice: '',
+      images: [],
+      isFeatured: false,
+      isActive: true,
+      metaTitle: '',
+      metaDescription: '',
     });
+    setCurrentImageUrl('');
   };
 
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = Array.isArray(products) 
+    ? products.filter((p) =>
+        p.name?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : [];
+
+  // Helper function to get category name
+  const getCategoryName = (product: Product): string => {
+    // First try to use the nested category object if available
+    if (product.category?.name) {
+      return product.category.name;
+    }
+    
+    // Otherwise, look up in the categories list
+    if (product.categoryId) {
+      const category = categories.find(c => Number(c.id) === Number(product.categoryId));
+      return category?.name || '-';
+    }
+    
+    return '-';
+  };
 
   return (
     <div>
@@ -217,124 +277,220 @@ const AdminProducts: React.FC = () => {
               Add Product
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingProduct ? 'Edit Product' : 'Add New Product'}</DialogTitle>
+              <DialogDescription>
+                {editingProduct 
+                  ? 'Update the product details below. Click update when you\'re done.' 
+                  : 'Fill in the product information below. Click create when you\'re done.'}
+              </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value, slug: generateSlug(e.target.value) })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="slug">Slug</Label>
-                <Input
-                  id="slug"
-                  value={formData.slug}
-                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                  placeholder="auto-generated-from-name"
-                />
-              </div>
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="price">Price *</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="compare_at_price">Compare at Price</Label>
-                  <Input
-                    id="compare_at_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.compare_at_price}
-                    onChange={(e) => setFormData({ ...formData, compare_at_price: e.target.value })}
-                    placeholder="Original price"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="stock">Stock *</Label>
-                  <Input
-                    id="stock"
-                    type="number"
-                    min="0"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="category">Category</Label>
-                  <Select
-                    value={formData.category_id}
-                    onValueChange={(value) => setFormData({ ...formData, category_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="image_url">Image URL</Label>
-                <Input
-                  id="image_url"
-                  type="url"
-                  value={formData.image_url}
-                  onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                  placeholder="https://..."
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="is_featured"
-                    checked={formData.is_featured}
-                    onCheckedChange={(checked) => setFormData({ ...formData, is_featured: checked })}
-                  />
-                  <Label htmlFor="is_featured">Featured</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="is_active"
-                    checked={formData.is_active}
-                    onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-                  />
-                  <Label htmlFor="is_active">Active</Label>
-                </div>
-              </div>
-              <div className="flex gap-3 pt-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <Tabs defaultValue="general" className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="general">General</TabsTrigger>
+                  <TabsTrigger value="details">Details</TabsTrigger>
+                  <TabsTrigger value="images">Images</TabsTrigger>
+                  <TabsTrigger value="seo">SEO</TabsTrigger>
+                </TabsList>
+
+                {/* General Tab */}
+                <TabsContent value="general" className="space-y-4">
+                  <div>
+                    <Label htmlFor="name">Name *</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value, slug: generateSlug(e.target.value) })}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="slug">Slug</Label>
+                    <Input
+                      id="slug"
+                      value={formData.slug}
+                      onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                      placeholder="auto-generated-from-name"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="shortDescription">Short Description</Label>
+                    <Textarea
+                      id="shortDescription"
+                      value={formData.shortDescription}
+                      onChange={(e) => setFormData({ ...formData, shortDescription: e.target.value })}
+                      rows={2}
+                      placeholder="Brief description for product listings"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="description">Full Description *</Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      rows={5}
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="basePrice">Base Price *</Label>
+                      <Input
+                        id="basePrice"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.basePrice}
+                        onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="category">Category</Label>
+                      <Select
+                        value={formData.categoryId}
+                        onValueChange={(value) => setFormData({ ...formData, categoryId: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {!categoriesLoading && categories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id.toString()}>
+                              {cat.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Details Tab */}
+                <TabsContent value="details" className="space-y-4">
+                  <div>
+                    <Label htmlFor="brand">Brand</Label>
+                    <Input
+                      id="brand"
+                      value={formData.brand}
+                      onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                      placeholder="e.g., Chanel, Dior, etc."
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="fragranceNotes">Fragrance Notes (JSON)</Label>
+                    <Textarea
+                      id="fragranceNotes"
+                      value={formData.fragranceNotes}
+                      onChange={(e) => setFormData({ ...formData, fragranceNotes: e.target.value })}
+                      rows={4}
+                      placeholder='{"top": ["Bergamot", "Lemon"], "heart": ["Rose", "Jasmine"], "base": ["Vanilla", "Musk"]}'
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enter as JSON object with top, heart, and base notes
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="isFeatured"
+                        checked={formData.isFeatured}
+                        onCheckedChange={(checked) => setFormData({ ...formData, isFeatured: checked })}
+                      />
+                      <Label htmlFor="isFeatured">Featured Product</Label>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="isActive"
+                        checked={formData.isActive}
+                        onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+                      />
+                      <Label htmlFor="isActive">Active</Label>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Images Tab */}
+                <TabsContent value="images" className="space-y-4">
+                  <div className="space-y-4">
+                    <Label>Product Images</Label>
+                    
+                    {/* Image preview grid */}
+                    {formData.images.length > 0 && (
+                      <div className="grid grid-cols-4 gap-4 mb-4">
+                        {formData.images.map((image, index) => (
+                          <div key={index} className="relative group">
+                            <img
+                              src={image}
+                              alt={`Product ${index + 1}`}
+                              className="w-full h-24 object-cover rounded-lg border border-border"
+                            />
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              className="absolute -top-2 -right-2 w-6 h-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => handleRemoveImage(image)}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add new image */}
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter image URL"
+                        value={currentImageUrl}
+                        onChange={(e) => setCurrentImageUrl(e.target.value)}
+                      />
+                      <Button type="button" onClick={handleAddImage} variant="outline">
+                        Add Image
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* SEO Tab */}
+                <TabsContent value="seo" className="space-y-4">
+                  <div>
+                    <Label htmlFor="metaTitle">Meta Title</Label>
+                    <Input
+                      id="metaTitle"
+                      value={formData.metaTitle}
+                      onChange={(e) => setFormData({ ...formData, metaTitle: e.target.value })}
+                      placeholder="SEO title (defaults to product name)"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="metaDescription">Meta Description</Label>
+                    <Textarea
+                      id="metaDescription"
+                      value={formData.metaDescription}
+                      onChange={(e) => setFormData({ ...formData, metaDescription: e.target.value })}
+                      rows={3}
+                      placeholder="SEO description"
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <div className="flex gap-3 pt-4 border-t">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setDialogOpen(false)}>
                   Cancel
                 </Button>
@@ -371,8 +527,9 @@ const AdminProducts: React.FC = () => {
                 <TableRow>
                   <TableHead className="w-16">Image</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Brand</TableHead>
                   <TableHead>Price</TableHead>
-                  <TableHead>Stock</TableHead>
+                  <TableHead>Category</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-16"></TableHead>
                 </TableRow>
@@ -382,8 +539,8 @@ const AdminProducts: React.FC = () => {
                   <TableRow key={product.id}>
                     <TableCell>
                       <div className="w-12 h-12 bg-muted rounded-lg overflow-hidden">
-                        {product.image_url ? (
-                          <img src={product.image_url} alt="" className="w-full h-full object-cover" />
+                        {product.images && product.images.length > 0 ? (
+                          <img src={product.images[0]} alt="" className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                             <ImageIcon className="w-5 h-5" />
@@ -398,35 +555,33 @@ const AdminProducts: React.FC = () => {
                       </div>
                     </TableCell>
                     <TableCell>
+                      <span className="text-sm">{product.brand || '-'}</span>
+                    </TableCell>
+                    <TableCell>
                       <div>
-                        <span className="font-medium">${product.price.toFixed(2)}</span>
-                        {product.compare_at_price && (
-                          <span className="text-xs text-muted-foreground line-through ml-2">
-                            ${product.compare_at_price.toFixed(2)}
-                          </span>
-                        )}
+                        <span className="font-medium">{product.basePrice?.toFixed(2)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className={product.stock <= 5 ? 'text-destructive font-medium' : ''}>
-                        {product.stock}
+                      <span className="text-sm">
+                        {getCategoryName(product)}
                       </span>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        {product.is_active ? (
-                          <span className="px-2 py-1 text-xs font-medium bg-success/20 text-success rounded-full">
+                        {product.isActive ? (
+                          <Badge variant="success" className="bg-success/20 text-success hover:bg-success/30">
                             Active
-                          </span>
+                          </Badge>
                         ) : (
-                          <span className="px-2 py-1 text-xs font-medium bg-muted text-muted-foreground rounded-full">
+                          <Badge variant="secondary">
                             Draft
-                          </span>
+                          </Badge>
                         )}
-                        {product.is_featured && (
-                          <span className="px-2 py-1 text-xs font-medium bg-accent/20 text-accent rounded-full">
+                        {product.isFeatured && (
+                          <Badge variant="accent" className="bg-accent/20 text-accent hover:bg-accent/30">
                             Featured
-                          </span>
+                          </Badge>
                         )}
                       </div>
                     </TableCell>

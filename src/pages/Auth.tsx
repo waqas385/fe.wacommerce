@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
+// Schema definitions remain the same
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
@@ -16,6 +17,7 @@ const signInSchema = z.object({
 
 const signUpSchema = signInSchema.extend({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
+  phoneNumber: z.string().min(13, 'Phone Number must be 13 characters'),
 });
 
 const Auth: React.FC = () => {
@@ -24,6 +26,7 @@ const Auth: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { user, signIn, signUp } = useAuth();
@@ -41,7 +44,7 @@ const Auth: React.FC = () => {
 
     try {
       if (isSignUp) {
-        signUpSchema.parse({ email, password, fullName });
+        signUpSchema.parse({ email, password, fullName, phoneNumber });
       } else {
         signInSchema.parse({ email, password });
       }
@@ -62,20 +65,21 @@ const Auth: React.FC = () => {
 
     try {
       if (isSignUp) {
-        const { error } = await signUp(email, password, fullName);
+        const { error } = await signUp(email, password, fullName, phoneNumber);
         if (error) {
-          if (error.message.includes('already registered')) {
+          if (error.message.includes('already exists') || error.message.includes('already registered')) {
             toast.error('This email is already registered. Please sign in.');
           } else {
             toast.error(error.message);
           }
         } else {
-          toast.success('Account created! Please check your email to verify.');
+          toast.success('Account created successfully!');
+          navigate('/');
         }
       } else {
         const { error } = await signIn(email, password);
         if (error) {
-          if (error.message.includes('Invalid login credentials')) {
+          if (error.message.includes('Invalid credentials')) {
             toast.error('Invalid email or password');
           } else {
             toast.error(error.message);
@@ -85,11 +89,14 @@ const Auth: React.FC = () => {
           navigate('/');
         }
       }
+    } catch (error) {
+      toast.error('An unexpected error occurred');
     } finally {
       setLoading(false);
     }
   };
 
+  // The JSX remains exactly the same as before
   return (
     <div className="min-h-screen flex">
       {/* Left - Form */}
@@ -117,21 +124,40 @@ const Auth: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-5">
               {isSignUp && (
                 <div>
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <div className="relative mt-1.5">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="fullName"
-                      type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder="John Doe"
-                      className="pl-10"
-                    />
+                  <div>
+                    <Label htmlFor="fullName">Full Name</Label>
+                    <div className="relative mt-1.5">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="fullName"
+                        type="text"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder="John Doe"
+                        className="pl-10"
+                      />
+                    </div>
+                    {errors.fullName && (
+                      <p className="text-destructive text-sm mt-1">{errors.fullName}</p>
+                    )}
                   </div>
-                  {errors.fullName && (
-                    <p className="text-destructive text-sm mt-1">{errors.fullName}</p>
+                  <div className="mt-5">
+                    <Label htmlFor="phoneNumber">Phone Number</Label>
+                    <div className="relative mt-1.5">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="phoneNumber"
+                        type="text"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        placeholder="+923332345678"
+                        className="pl-10"
+                      />
+                    </div>
+                  {errors.phoneNumber && (
+                    <p className="text-destructive text-sm mt-1">{errors.phoneNumber}</p>
                   )}
+                  </div>
                 </div>
               )}
 
