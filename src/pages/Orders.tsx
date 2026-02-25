@@ -1,23 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Package, ArrowLeft, Eye } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
+import ordersService, { Order as BackendOrder, OrderItem as BackendOrderItem } from '@/services/orders';
+
+interface OrderItem {
+  id: number;
+  product_name: string;
+  product_price: number;
+  quantity: number;
+  total?: number;
+}
 
 interface Order {
-  id: string;
+  id: number;
+  orderNumber: string;
   status: string;
   total: number;
   created_at: string;
-  order_items: {
-    id: string;
-    product_name: string;
-    product_price: number;
-    quantity: number;
-  }[];
+  order_items: OrderItem[];
 }
 
 const statusColors: Record<string, string> = {
@@ -32,6 +37,7 @@ const Orders: React.FC = () => {
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (user) {
@@ -41,27 +47,60 @@ const Orders: React.FC = () => {
 
   const fetchOrders = async () => {
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          order_items (
-            id,
-            product_name,
-            product_price,
-            quantity
-          )
-        `)
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOrders(data || []);
+      // Fetch orders from your service
+      const response = await ordersService.getOrders({
+        limit: 50 // Fetch up to 50 orders
+      });
+      
+      console.log('Orders API response:', response); // Debug log
+      
+      // Transform backend orders to match the Order interface
+      const transformedOrders: Order[] = response.orders.map(order => ({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        total: order.total,
+        created_at: order.createdAt,
+        order_items: order.items.map(item => ({
+          id: item.id,
+          product_name: item.productName,
+          product_price: item.price,
+          quantity: item.quantity,
+          total: item.total
+        }))
+      }));
+      
+      setOrders(transformedOrders);
     } catch (error) {
       console.error('Error fetching orders:', error);
+      toast.error('Failed to load orders');
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatOrderNumber = (orderNumber: string) => {
+    return `#${orderNumber}`;
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  const getStatusBadgeClass = (status: string) => {
+    return statusColors[status.toLowerCase()] || 'bg-muted text-muted-foreground';
+  };
+
+  const formatStatus = (status: string) => {
+    return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  };
+
+  const handleViewDetails = (orderId: number) => {
+    navigate(`/orders/${orderId}`);
   };
 
   if (!user) {
@@ -137,18 +176,14 @@ const Orders: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                       <span className="font-mono text-sm text-muted-foreground">
-                        #{order.id.slice(0, 8).toUpperCase()}
+                        {formatOrderNumber(order.orderNumber)}
                       </span>
-                      <Badge className={statusColors[order.status] || 'bg-muted text-muted-foreground'}>
-                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                      <Badge className={getStatusBadgeClass(order.status)}>
+                        {formatStatus(order.status)}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(order.created_at).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
+                      {formatDate(order.created_at)}
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
@@ -156,7 +191,11 @@ const Orders: React.FC = () => {
                       <p className="text-sm text-muted-foreground">Total</p>
                       <p className="font-bold text-lg">${order.total.toFixed(2)}</p>
                     </div>
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleViewDetails(order.id)}
+                    >
                       <Eye className="w-4 h-4 mr-2" />
                       Details
                     </Button>
@@ -164,21 +203,23 @@ const Orders: React.FC = () => {
                 </div>
 
                 {/* Order Items */}
-                <div className="p-4 md:p-6 bg-muted/30">
-                  <div className="grid gap-3">
-                    {order.order_items.map((item) => (
-                      <div key={item.id} className="flex justify-between items-center">
-                        <div>
-                          <span className="font-medium">{item.product_name}</span>
-                          <span className="text-muted-foreground ml-2">×{item.quantity}</span>
+                {order.order_items && order.order_items.length > 0 && (
+                  <div className="p-4 md:p-6 bg-muted/30">
+                    <div className="grid gap-3">
+                      {order.order_items.map((item) => (
+                        <div key={item.id} className="flex justify-between items-center">
+                          <div>
+                            <span className="font-medium">{item.product_name}</span>
+                            <span className="text-muted-foreground ml-2">×{item.quantity}</span>
+                          </div>
+                          <span className="font-medium">
+                            ${(item.product_price * item.quantity).toFixed(2)}
+                          </span>
                         </div>
-                        <span className="font-medium">
-                          ${(item.product_price * item.quantity).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </motion.div>
             ))}
           </div>

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
@@ -51,18 +52,51 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
-  // Helper function to transform backend cart item to frontend CartItem format
-  const transformCartItem = (backendItem: BackendCartItem): CartItem => {
+  // In CartContext.tsx, update the transformCartItem function:
+  const transformCartItem = (backendItem: any): CartItem => {
+    // Log the actual structure to see what we're getting
+    console.log('Transforming backend item:', backendItem);
+    
+    // Handle different possible price field names
+    let price = 0;
+    if (backendItem.product?.basePrice !== undefined) {
+      price = backendItem.product.basePrice;
+    } else if (backendItem.product?.price !== undefined) {
+      price = backendItem.product.price;
+    } else if (backendItem.product?.amount !== undefined) {
+      price = backendItem.product.amount;
+    }
+    
+    // Handle different possible image field names
+    let imageUrl = null;
+    if (backendItem.product?.images?.[0]) {
+      imageUrl = backendItem.product.images[0];
+    } else if (backendItem.product?.image_url) {
+      imageUrl = backendItem.product.image_url;
+    } else if (backendItem.product?.imageUrl) {
+      imageUrl = backendItem.product.imageUrl;
+    }
+    
+    // Handle different possible stock field names
+    let stock = 10; // default
+    if (backendItem.product?.stock !== undefined) {
+      stock = backendItem.product.stock;
+    } else if (backendItem.product?.inventory !== undefined) {
+      stock = backendItem.product.inventory;
+    } else if (backendItem.product?.quantity !== undefined) {
+      stock = backendItem.product.quantity;
+    }
+    
     return {
       id: backendItem.id,
-      product_id: backendItem.product.id,
-      quantity: backendItem.quantity,
+      product_id: backendItem.product?.id || backendItem.productId || '',
+      quantity: backendItem.quantity || 1,
       product: {
-        id: backendItem.product.id,
-        name: backendItem.product.name,
-        price: backendItem.product.basePrice,
-        image_url: backendItem.product.images?.[0] || null,
-        stock: 10, // You might want to fetch this from your product data
+        id: backendItem.product?.id || '',
+        name: backendItem.product?.name || 'Unknown Product',
+        price: price,
+        image_url: imageUrl,
+        stock: stock,
       }
     };
   };

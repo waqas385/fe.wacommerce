@@ -42,7 +42,7 @@ class CategoriesService {
 
     const url = queryParams.toString() ? `${this.baseUrl}?${queryParams}` : this.baseUrl;
     const response = await api.get<CategoriesResponse | Category[]>(url);
-    
+
     // Handle both paginated and non-paginated responses
     if (Array.isArray(response.data)) {
       return response.data;

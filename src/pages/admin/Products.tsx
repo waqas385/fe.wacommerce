@@ -54,6 +54,7 @@ interface ProductFormData {
   isActive: boolean;
   metaTitle: string;
   metaDescription: string;
+  stock: string;
 }
 
 const AdminProducts: React.FC = () => {
@@ -79,6 +80,7 @@ const AdminProducts: React.FC = () => {
     isActive: true,
     metaTitle: '',
     metaDescription: '',
+    stock: ''
   });
 
   useEffect(() => {
@@ -169,6 +171,7 @@ const AdminProducts: React.FC = () => {
         isActive: formData.isActive,
         metaTitle: formData.metaTitle || null,
         metaDescription: formData.metaDescription || null,
+        stock: String(formData.stock)
       };
 
       if (editingProduct) {
@@ -204,6 +207,7 @@ const AdminProducts: React.FC = () => {
       isActive: product.isActive ?? true,
       metaTitle: product.metaTitle || '',
       metaDescription: product.metaDescription || '',
+      stock: String(product.stock) || '',
     });
     setDialogOpen(true);
   };
@@ -237,6 +241,7 @@ const AdminProducts: React.FC = () => {
       isActive: true,
       metaTitle: '',
       metaDescription: '',
+      stock: '',
     });
     setCurrentImageUrl('');
   };
@@ -339,7 +344,20 @@ const AdminProducts: React.FC = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="stock">Stock *</Label>
+                      <Input
+                        id="stock"
+                        type="number"
+                        min="0"
+                        value={formData.stock}
+                        onChange={(e) =>
+                          setFormData({ ...formData, stock: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
                     <div>
                       <Label htmlFor="basePrice">Base Price *</Label>
                       <Input

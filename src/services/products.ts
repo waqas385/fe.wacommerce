@@ -53,6 +53,7 @@ export interface CreateProductData {
   isActive: boolean;
   metaTitle?: string | null;
   metaDescription?: string | null;
+  stock: string | null;
 }
 
 // Type for updating products (all fields optional except id)

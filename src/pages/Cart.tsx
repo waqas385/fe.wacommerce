@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,10 +12,26 @@ const Cart: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  // Log items to debug structure
+  React.useEffect(() => {
+    if (items.length > 0) {
+      console.log('Cart items structure:', items);
+    }
+  }, [items]);
+
   const shippingThreshold = 100;
   const shippingCost = totalPrice >= shippingThreshold ? 0 : 9.99;
-  const remainingForFreeShipping = shippingThreshold - totalPrice;
+  const remainingForFreeShipping = Math.max(0, shippingThreshold - totalPrice);
 
+  // Safe price formatter
+  const formatPrice = (price: any): string => {
+    if (typeof price === 'number' && !isNaN(price)) {
+      return price.toFixed(2);
+    }
+    return '0.00';
+  };
+
+  // Handle case when user is not authenticated
   if (!user) {
     return (
       <div className="py-16 md:py-24">
@@ -32,6 +49,7 @@ const Cart: React.FC = () => {
     );
   }
 
+  // Handle loading state
   if (loading) {
     return (
       <div className="py-8 md:py-12">
@@ -52,6 +70,7 @@ const Cart: React.FC = () => {
     );
   }
 
+  // Handle empty cart
   if (items.length === 0) {
     return (
       <div className="py-16 md:py-24">
@@ -89,72 +108,92 @@ const Cart: React.FC = () => {
           {/* Cart Items */}
           <div className="lg:col-span-2 space-y-4">
             <AnimatePresence mode="popLayout">
-              {items.map((item) => (
-                <motion.div
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: -100 }}
-                  className="flex gap-4 p-4 bg-card border border-border rounded-xl"
-                >
-                  {/* Image */}
-                  <div className="w-24 h-24 bg-secondary rounded-lg overflow-hidden shrink-0">
-                    {item.product.image_url ? (
-                      <img
-                        src={item.product.image_url}
-                        alt={item.product.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                        <ShoppingBag className="w-8 h-8" />
-                      </div>
-                    )}
-                  </div>
+              {items.map((item) => {
+                // Safely access product properties with defaults
+                const productName = item.product?.name || 'Product';
+                const productPrice = typeof item.product?.price === 'number' ? item.product.price : 0;
+                const productImage = item.product?.image_url || null;
+                const productStock = typeof item.product?.stock === 'number' ? item.product.stock : 0;
+                const subtotal = productPrice * item.quantity;
 
-                  {/* Details */}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-foreground truncate">{item.product.name}</h3>
-                    <p className="text-accent font-semibold mt-1">
-                      ${item.product.price.toFixed(2)}
-                    </p>
-
-                    {/* Quantity Controls */}
-                    <div className="flex items-center justify-between mt-3">
-                      <div className="flex items-center border border-border rounded-lg">
-                        <button
-                          onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
-                          className="p-2 hover:bg-muted transition-colors"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <span className="px-4 font-medium text-sm">{item.quantity}</span>
-                        <button
-                          onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
-                          className="p-2 hover:bg-muted transition-colors"
-                          disabled={item.quantity >= item.product.stock}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => removeFromCart(item.product_id)}
-                        className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                return (
+                  <motion.div
+                    key={item.id}
+                    layout
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: -100 }}
+                    className="flex gap-4 p-4 bg-card border border-border rounded-xl"
+                  >
+                    {/* Image */}
+                    <div className="w-24 h-24 bg-secondary rounded-lg overflow-hidden shrink-0">
+                      {productImage ? (
+                        <img
+                          src={productImage}
+                          alt={productName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                          <ShoppingBag className="w-8 h-8" />
+                        </div>
+                      )}
                     </div>
-                  </div>
 
-                  {/* Subtotal */}
-                  <div className="hidden sm:block text-right">
-                    <p className="text-sm text-muted-foreground">Subtotal</p>
-                    <p className="font-semibold">${(item.product.price * item.quantity).toFixed(2)}</p>
-                  </div>
-                </motion.div>
-              ))}
+                    {/* Details */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-foreground truncate">{productName}</h3>
+                      <p className="text-accent font-semibold mt-1">
+                        ${formatPrice(productPrice)}
+                      </p>
+
+                      {/* Stock warning - added for better UX */}
+                      {productStock > 0 && item.quantity >= productStock && (
+                        <p className="text-xs text-destructive mt-1">
+                          Max stock available
+                        </p>
+                      )}
+
+                      {/* Quantity Controls */}
+                      <div className="flex items-center justify-between mt-3">
+                        <div className="flex items-center border border-border rounded-lg">
+                          <button
+                            onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
+                            className="p-2 hover:bg-muted transition-colors disabled:opacity-50"
+                            disabled={item.quantity <= 1}
+                            aria-label="Decrease quantity"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span className="px-4 font-medium text-sm">{item.quantity}</span>
+                          <button
+                            onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
+                            className="p-2 hover:bg-muted transition-colors disabled:opacity-50"
+                            disabled={productStock > 0 && item.quantity >= productStock}
+                            aria-label="Increase quantity"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => removeFromCart(item.product_id)}
+                          className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                          aria-label="Remove item"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Subtotal */}
+                    <div className="hidden sm:block text-right">
+                      <p className="text-sm text-muted-foreground">Subtotal</p>
+                      <p className="font-semibold">${formatPrice(subtotal)}</p>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           </div>
 
@@ -172,7 +211,7 @@ const Cart: React.FC = () => {
                   <div className="mt-2 h-2 bg-accent/20 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-accent rounded-full transition-all"
-                      style={{ width: `${(totalPrice / shippingThreshold) * 100}%` }}
+                      style={{ width: `${Math.min((totalPrice / shippingThreshold) * 100, 100)}%` }}
                     />
                   </div>
                 </div>
@@ -181,11 +220,11 @@ const Cart: React.FC = () => {
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium">${totalPrice.toFixed(2)}</span>
+                  <span className="font-medium">${formatPrice(totalPrice)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Shipping</span>
-                  <span className={`font-medium ${shippingCost === 0 ? 'text-success' : ''}`}>
+                  <span className={`font-medium ${shippingCost === 0 ? 'text-green-600' : ''}`}>
                     {shippingCost === 0 ? 'Free' : `$${shippingCost.toFixed(2)}`}
                   </span>
                 </div>
@@ -193,7 +232,7 @@ const Cart: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="font-semibold">Total</span>
                     <span className="font-bold text-lg">
-                      ${(totalPrice + shippingCost).toFixed(2)}
+                      ${formatPrice(totalPrice + shippingCost)}
                     </span>
                   </div>
                 </div>
@@ -202,14 +241,11 @@ const Cart: React.FC = () => {
               <Button
                 onClick={() => navigate('/checkout')}
                 className="w-full h-12 bg-gradient-accent hover:opacity-90"
+                disabled={items.length === 0}
               >
                 Proceed to Checkout
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
-
-              <p className="text-center text-muted-foreground text-xs mt-4">
-                Secure checkout powered by Stripe
-              </p>
             </div>
           </div>
         </div>

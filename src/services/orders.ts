@@ -50,6 +50,16 @@ export interface UpdateOrderStatusData {
   notes?: string;
 }
 
+interface CreateOrderItemDto {
+  productId: number;
+  quantity: number;
+}
+
+interface CreateOrderDto {
+  notes?: string;
+  items: CreateOrderItemDto[];
+}
+
 class OrdersService {
   private readonly baseUrl = '/orders';
 
@@ -85,6 +95,11 @@ class OrdersService {
 
   async cancelOrder(id: number): Promise<Order> {
     const response = await api.patch<Order>(`${this.baseUrl}/${id}/cancel`, {});
+    return response.data;
+  }
+
+  async createOrder(orderData: CreateOrderDto): Promise<Order> {
+    const response = await api.post<Order>(this.baseUrl, orderData);
     return response.data;
   }
 }

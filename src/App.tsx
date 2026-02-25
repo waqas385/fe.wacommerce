@@ -18,6 +18,9 @@ import Cart from "@/pages/Cart";
 import Orders from "@/pages/Orders";
 import Auth from "@/pages/Auth";
 import NotFound from "@/pages/NotFound";
+import Checkout from "@/pages/Checkout";
+import OrderConfirmation from "@/pages/OrderConfirmation";
+import OrderDetail from "@/pages/OrderDetail";
 
 // Admin Pages
 import AdminDashboard from "@/pages/admin/Dashboard";
@@ -25,6 +28,7 @@ import AdminProducts from "@/pages/admin/Products";
 import AdminOrders from "@/pages/admin/Orders";
 import AdminCategories from "@/pages/admin/Categories";
 import AdminUsers from "@/pages/admin/Users";
+import AdminOrderDetail from "@/pages/admin/OrderDetail";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +51,9 @@ const App = () => (
                 <Route path="/products/:slug" element={<ProductDetail />} />
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/orders" element={<Orders />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/order-confirmation/:orderId" element={<OrderConfirmation />} />
+                <Route path="/orders/:orderId" element={<OrderDetail />} />
               </Route>
 
               {/* Admin Routes */}
@@ -56,6 +63,7 @@ const App = () => (
                 <Route path="orders" element={<AdminOrders />} />
                 <Route path="categories" element={<AdminCategories />} />
                 <Route path="users" element={<AdminUsers />} />
+                <Route path="orders/:orderId" element={<AdminOrderDetail />} />
               </Route>
 
               {/* 404 */}
