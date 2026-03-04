@@ -4,6 +4,7 @@ export interface OrderUser {
   id: number;
   email: string;
   fullName: string;
+  phone: string;
 }
 
 export interface OrderItem {
@@ -85,6 +86,13 @@ class OrdersService {
 
   async updateOrderStatus(id: number, statusData: UpdateOrderStatusData): Promise<Order> {
     const response = await api.patch<Order>(`${this.baseUrl}/${id}/status`, statusData);
+    return response.data;
+  }
+
+  async updatePaymentStatus(id: number, paymentStatus: string): Promise<Order> {
+    const response = await api.patch<Order>(`${this.baseUrl}/${id}/payment-status`, {
+      status: paymentStatus
+    });
     return response.data;
   }
 

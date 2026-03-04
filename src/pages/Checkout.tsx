@@ -1,7 +1,6 @@
-// src/pages/Checkout.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, number } from 'framer-motion';
 import { 
   ArrowLeft, 
   CreditCard, 
@@ -11,7 +10,6 @@ import {
   MapPin,
   Building2,
   AlertCircle,
-  Home,
   Package
 } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
@@ -20,16 +18,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { toast } from 'sonner';
 import ordersService from '@/services/orders';
-// import { api } from '@/services/api';
+import usersService, { UserAddress } from '@/services/users';
+
 
 interface ShippingAddress {
   fullName: string;
@@ -37,9 +29,12 @@ interface ShippingAddress {
   addressLine2?: string;
   city: string;
   phone: string;
+  addressType: 'both' | 'shipping' | 'billing';
+  id: number;
 }
 
 interface OrderFormData {
+  shippingAddress?: UserAddress;
   notes?: string;
   items: Array<{
     productId: number;
@@ -62,6 +57,8 @@ const Checkout: React.FC = () => {
     addressLine2: '',
     city: '',
     phone: user?.phoneNumber || '',
+    addressType: 'both',
+    id: -1
   });
 
   const [notes, setNotes] = useState('');
@@ -81,14 +78,22 @@ const Checkout: React.FC = () => {
     }
   }, [items, user, navigate]);
 
-  // Fetch saved addresses (if you have an endpoint)
   useEffect(() => {
     const fetchAddresses = async () => {
+      // Prevent fetching if we already have address data
+      if (shippingAddress.addressLine1) return;
+      
       try {
-        // Only if you have an addresses endpoint
-        // const response = await api.get('/addresses');
-        // setSavedAddresses(response.data);
-        setSavedAddresses([]); // Default to empty array
+        const response = await usersService.getUserById(user.id.toString());
+        setShippingAddress({
+          fullName: user?.fullName || '',
+          phone: response.phoneNumber,
+          addressLine1: response.addresses[0].addressLine1,
+          addressLine2: response.addresses[0].addressLine2,
+          city: response.addresses[0].city,
+          addressType: response.addresses[0].addressType,
+          id: response.addresses[0].id
+        });
       } catch (error) {
         console.error('Error fetching addresses:', error);
       }
@@ -97,7 +102,7 @@ const Checkout: React.FC = () => {
     if (user) {
       fetchAddresses();
     }
-  }, [user]);
+  }, [user]); // Only depend on user
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -116,16 +121,16 @@ const Checkout: React.FC = () => {
       toast.error('Please enter your full name');
       return false;
     }
+    if (!phone.trim()) {
+      toast.error('Please enter your phone number');
+      return false;
+    }
     if (!addressLine1.trim()) {
       toast.error('Please enter your address');
       return false;
     }
     if (!city.trim()) {
       toast.error('Please enter your city');
-      return false;
-    }
-    if (!phone.trim()) {
-      toast.error('Please enter your phone number');
       return false;
     }
     return true;
@@ -143,9 +148,16 @@ const Checkout: React.FC = () => {
       }));
 
       // Create order data according to CreateOrderDto
-      const orderData = {
+      const orderData: OrderFormData = {
         items: orderItems,
-        ...(notes.trim() && { notes: notes.trim() }), // Only include notes if provided
+        ...(notes.trim() && { notes: notes.trim() }),
+        shippingAddress: {
+          addressLine1: shippingAddress.addressLine1,
+          addressLine2: shippingAddress.addressLine2,
+          city: shippingAddress.city,
+          addressType: shippingAddress.addressType,
+          id: shippingAddress.id
+        }
       };
 
       // Create order

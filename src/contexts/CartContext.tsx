@@ -114,11 +114,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     setLoading(true);
     try {
-      const response = await api.get('/cart');
-      
-      // Log the response to see its structure
-      console.log('Cart API response:', response.data);
-      
+      const response = await api.get('/cart');      
       let cartItemsData: BackendCartItem[] = [];
       
       // Handle different response structures

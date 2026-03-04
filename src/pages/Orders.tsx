@@ -52,8 +52,6 @@ const Orders: React.FC = () => {
         limit: 50 // Fetch up to 50 orders
       });
       
-      console.log('Orders API response:', response); // Debug log
-      
       // Transform backend orders to match the Order interface
       const transformedOrders: Order[] = response.orders.map(order => ({
         id: order.id,

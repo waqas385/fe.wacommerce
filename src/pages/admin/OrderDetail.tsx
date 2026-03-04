@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/pages/admin/OrderDetail.tsx
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
@@ -30,6 +29,7 @@ import { toast } from 'sonner';
 import ordersService, { Order } from '@/services/orders';
 
 const statusOptions = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+const paymentStatusOptions = ['pending', 'paid', 'failed', 'refunded'];
 
 const statusLabels: Record<string, string> = {
   pending: 'Pending',
@@ -37,6 +37,13 @@ const statusLabels: Record<string, string> = {
   shipped: 'Shipped',
   delivered: 'Delivered',
   cancelled: 'Cancelled',
+};
+
+const paymentStatusLabels: Record<string, string> = {
+  pending: 'Pending',
+  paid: 'Paid',
+  failed: 'Failed',
+  refunded: 'Refunded',
 };
 
 const statusColors: Record<string, string> = {
@@ -47,12 +54,20 @@ const statusColors: Record<string, string> = {
   cancelled: 'bg-destructive/20 text-destructive border-destructive/20',
 };
 
+const paymentStatusColors: Record<string, string> = {
+  pending: 'bg-warning/20 text-warning border-warning/20',
+  paid: 'bg-success/20 text-success border-success/20',
+  failed: 'bg-destructive/20 text-destructive border-destructive/20',
+  refunded: 'bg-gray-500/20 text-gray-500 border-gray-500/20',
+};
+
 const AdminOrderDetail: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [updatingPayment, setUpdatingPayment] = useState(false);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -78,7 +93,7 @@ const AdminOrderDetail: React.FC = () => {
     if (!order) return;
     
     try {
-      setUpdating(true);
+      setUpdatingStatus(true);
       await ordersService.updateOrderStatus(order.id, { status });
       setOrder({ ...order, status });
       toast.success(`Order status updated to ${statusLabels[status]}`);
@@ -86,7 +101,23 @@ const AdminOrderDetail: React.FC = () => {
       console.error('Error updating order status:', error);
       toast.error(error.response?.data?.message || 'Failed to update order status');
     } finally {
-      setUpdating(false);
+      setUpdatingStatus(false);
+    }
+  };
+
+  const updatePaymentStatus = async (paymentStatus: string) => {
+    if (!order) return;
+    
+    try {
+      setUpdatingPayment(true);
+      await ordersService.updatePaymentStatus(order.id, paymentStatus);
+      setOrder({ ...order, paymentStatus });
+      toast.success(`Payment status updated to ${paymentStatusLabels[paymentStatus]}`);
+    } catch (error: any) {
+      console.error('Error updating payment status:', error);
+      toast.error(error.response?.data?.message || 'Failed to update payment status');
+    } finally {
+      setUpdatingPayment(false);
     }
   };
 
@@ -173,14 +204,15 @@ const AdminOrderDetail: React.FC = () => {
 
       {/* Status Update Card */}
       <div className="bg-card border border-border rounded-xl p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Order Status */}
+          <div>
             <label className="text-sm font-medium mb-2 block">Order Status</label>
             <div className="flex items-center gap-4">
               <Select
                 value={order.status}
                 onValueChange={updateOrderStatus}
-                disabled={updating}
+                disabled={updatingStatus}
               >
                 <SelectTrigger className="w-48">
                   <SelectValue>
@@ -201,7 +233,7 @@ const AdminOrderDetail: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
-              {updating && (
+              {updatingStatus && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   <span className="text-sm">Updating...</span>
@@ -209,17 +241,42 @@ const AdminOrderDetail: React.FC = () => {
               )}
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-muted-foreground">Payment Status</p>
-            <Badge 
-              variant="outline"
-              className={order.paymentStatus === 'paid' 
-                ? 'bg-success/20 text-success border-success/20 mt-1' 
-                : 'bg-warning/20 text-warning border-warning/20 mt-1'
-              }
-            >
-              {order.paymentStatus || 'Pending'}
-            </Badge>
+
+          {/* Payment Status */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">Payment Status</label>
+            <div className="flex items-center gap-4">
+              <Select
+                value={order.paymentStatus || 'pending'}
+                onValueChange={updatePaymentStatus}
+                disabled={updatingPayment}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue>
+                    <Badge className={paymentStatusColors[order.paymentStatus || 'pending']}>
+                      {paymentStatusLabels[order.paymentStatus || 'pending']}
+                    </Badge>
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {paymentStatusOptions.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      <div className="flex items-center gap-2">
+                        <Badge className={paymentStatusColors[status]}>
+                          {paymentStatusLabels[status]}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {updatingPayment && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Updating...</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -393,26 +450,6 @@ const AdminOrderDetail: React.FC = () => {
                   <span>Total</span>
                   <span className="text-lg text-accent">${Number(order.total).toFixed(2)}</span>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Payment Information */}
-          <div className="bg-card border border-border rounded-xl p-6">
-            <h2 className="font-display text-lg font-semibold mb-4 flex items-center gap-2">
-              <CreditCard className="w-5 h-5" />
-              Payment
-            </h2>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-muted-foreground">Method</p>
-                <p className="font-medium capitalize">
-                  {order.paymentMethod || 'Cash on Delivery'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Transaction ID</p>
-                <p className="font-mono text-sm">{order.transactionId || 'N/A'}</p>
               </div>
             </div>
           </div>

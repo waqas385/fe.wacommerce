@@ -56,10 +56,6 @@ const Header: React.FC = () => {
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-              <Search className="w-5 h-5" />
-            </Button>
-
             <Link to="/cart" className="relative">
               <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
                 <ShoppingBag className="w-5 h-5" />
@@ -100,6 +96,11 @@ const Header: React.FC = () => {
                     </>
                   )}
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/profile" className="cursor-pointer">
+                      My Profile
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive">
                     <LogOut className="w-4 h-4 mr-2" />
                     Sign Out

@@ -1,5 +1,13 @@
 import { api } from './api';
 
+export interface UserAddress {
+  addressLine1: string,
+  addressLine2: string,
+  city: string,
+  addressType: 'both' | 'shipping' | 'billing',
+  id: number
+}
+
 export interface UserProfile {
   id: number;
   email: string;
@@ -11,6 +19,7 @@ export interface UserProfile {
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
+  addresses: UserAddress[]
 }
 
 // Type for role update

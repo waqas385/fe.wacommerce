@@ -1,13 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { authService, User } from '@/services/auth';
+import { authService, User, ApiError } from '@/services/auth';
 import { api } from '@/services/api';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   isAdmin: boolean;
-  signUp: (email: string, password: string, fullName: string, phoneNumber: string) => Promise<{ error: Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, phoneNumber: string) => Promise<{ error: ApiError | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: ApiError | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -25,16 +25,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      /**
-       * Since we removed getCurrentUser(),
-       * the simplest approach is to store user in localStorage
-       * when logging in and restore it here.
-       */
       const storedUser = localStorage.getItem('auth_user');
 
       if (storedUser) {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser);
+        } catch (e) {
+          // Invalid stored user data
+          localStorage.removeItem('auth_user');
+          api.setToken(null);
+        }
       } else {
         // Token exists but no user stored → clear token
         api.setToken(null);
@@ -47,35 +48,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string, phoneNumber: string) => {
-    try {
-      const data = await authService.signup(email, password, fullName, phoneNumber);
+    const { data, error } = await authService.signup(email, password, fullName, phoneNumber);
 
-      if (data?.user) {
-        setUser(data.user);
-        localStorage.setItem('auth_user', JSON.stringify(data.user));
-        return { error: null };
-      }
-
-      return { error: new Error('Signup failed') };
-    } catch (err: any) {
-      return { error: err };
+    if (error) {
+      return { error };
     }
+
+    if (data?.user) {
+      setUser(data.user);
+      localStorage.setItem('auth_user', JSON.stringify(data.user));
+      return { error: null };
+    }
+
+    return { error: { message: 'Signup failed: No user data received' } };
   };
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const data = await authService.signin(email, password);
+    const { data, error } = await authService.signin(email, password);
 
-      if (data?.user) {
-        setUser(data.user);
-        localStorage.setItem('auth_user', JSON.stringify(data.user));
-        return { error: null };
-      }
-
-      return { error: new Error('Login failed') };
-    } catch (err: any) {
-      return { error: err };
+    if (error) {
+      return { error };
     }
+
+    if (data?.user) {
+      setUser(data.user);
+      localStorage.setItem('auth_user', JSON.stringify(data.user));
+      return { error: null };
+    }
+
+    return { error: { message: 'Login failed: No user data received' } };
   };
 
   const signOut = async () => {
